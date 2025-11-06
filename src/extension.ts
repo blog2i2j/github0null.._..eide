@@ -1799,8 +1799,10 @@ class MapViewEditorProvider implements vscode.CustomTextEditorProvider {
                         }
 
                         if (os.platform() == 'win32') {
+                            // "%USERPROFILE%\.eide\bin\python36\python3" -m memap %*
+                            const py3 = ResManager.instance().getPython3();
                             lines = ChildProcess
-                                .execSync(`memap -t ${memapTyp} -d ${vInfo.treeDepth} "${vInfo.mapPath}"`)
+                                .execFileSync(py3, ['-m', 'memap', '-t', memapTyp, '-d', vInfo.treeDepth.toString(), vInfo.mapPath])
                                 .toString().split(/\r\n|\n/);
                         } else {
                             const memapRoot = ResManager.GetInstance().getLegacyBuilderDir().path + File.sep + 'utils';
