@@ -2203,18 +2203,18 @@ class ExternalDebugConfigProvider implements vscode.DebugConfigurationProvider {
                 if (m && m.length > 1) {
                     dbgCfg['probe'] = m[1];
                 }
-                 // parse '--chip-description-path <path>' (support quoted path)
-                 // examples:
-                 //   --chip-description-path /path/to/desc.yaml
-                 //   --chip-description-path "/path/with spaces/desc.yaml"
-                 m = /--chip-description-path\s+("[^"]+"|[^\s]+)/.exec(flasherCfg.otherOptions);
-                 if (m && m.length > 1) {
-                     let p = m[1];
-                     // strip surrounding quotes if present
-                     if (p.startsWith('"') && p.endsWith('"'))
-                         p = p.substring(1, p.length - 1);
-                     dbgCfg['chipDescriptionPath'] = p;
-                 }
+                // parse '--chip-description-path <path>' (support quoted path)
+                // examples:
+                //   --chip-description-path /path/to/desc.yaml
+                //   --chip-description-path "/path/with spaces/desc.yaml"
+                m = /--chip-description-path\s+("[^"]+"|[^\s]+)/.exec(flasherCfg.otherOptions);
+                if (m && m.length > 1) {
+                    let p = m[1];
+                    // strip surrounding quotes if present
+                    if (p.startsWith('"') && p.endsWith('"'))
+                        p = p.substring(1, p.length - 1);
+                    dbgCfg['chipDescriptionPath'] = p;
+                }
             }
             result.push(dbgCfg);
             result.push(newAttachDebugCfg(dbgCfg));
