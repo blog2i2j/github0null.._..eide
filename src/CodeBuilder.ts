@@ -115,7 +115,7 @@ export abstract class CodeBuilder {
     protected onlyDumpCompilerInfo?: boolean;
     protected otherArgs?: string[];
     protected _event: events.EventEmitter;
-    protected logWatcher: FileWatcher | undefined;
+    protected lockWatcher: FileWatcher | undefined;
 
     constructor(_project: AbstractProject) {
         this.project = _project;
@@ -282,18 +282,23 @@ export abstract class CodeBuilder {
             };
 
             const outDir = this.project.ToAbsolutePath(this.project.getOutputDir());
-            const builderLog = File.fromArray([outDir, 'unify_builder.log']);
-            if (!builderLog.IsFile()) builderLog.Write('');
-            if (this.logWatcher) { this.logWatcher.Close(); delete this.logWatcher; };
+            const lockFile = File.from(outDir, '.lock');
+            if (!lockFile.IsFile())
+                lockFile.Write('');
+            if (this.lockWatcher) {
+                this.lockWatcher.Close();
+                delete this.lockWatcher;
+            };
 
-            this.logWatcher = new FileWatcher(builderLog, false);
-            this.logWatcher.OnChanged = () => {
-                this.logWatcher?.Close();
-                setTimeout(() => this.emit('finished', checkBuildDone(builderLog)), 500);
+            this.lockWatcher = new FileWatcher(lockFile, false);
+            this.lockWatcher.OnChanged = () => {
+                this.lockWatcher?.Close();
+                const builderLogFile = File.from(outDir, 'unify_builder.log');
+                setTimeout(() => this.emit('finished', checkBuildDone(builderLogFile)), 500);
             };
 
             // start watch
-            this.logWatcher.Watch();
+            this.lockWatcher.Watch();
 
         } catch (error) {
             GlobalEvent.emit('msg', ExceptionToMessage(error, 'Hidden'));
