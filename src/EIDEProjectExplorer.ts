@@ -110,7 +110,8 @@ import {
     openocd_getConfigList,
     pyocd_getTargetList,
     generateDotnetProgramCmd,
-    isGccFamilyToolchain
+    isGccFamilyToolchain,
+    cxxDemangle
 } from './utility';
 import { concatSystemEnvPath, DeleteDir, exeSuffix, kill, osType, DeleteAllChildren, userhome, getGlobalState } from './Platform';
 import { KeilARMOption, KeilC51Option, KeilParser, KeilRteDependence } from './KeilXmlParser';
@@ -1834,6 +1835,7 @@ class ProjectDataProvider implements vscode.TreeDataProvider<ProjTreeItem>, vsco
                 let elftool = '';
                 let elfcmds = [''];
                 let elfsort = false; // elftool has sorted ?
+                let cxxfilt: string | undefined; // c++filt tools
 
                 let staMatcher: RegExp | undefined;
                 let endMatcher: RegExp | undefined;
@@ -1887,6 +1889,7 @@ class ProjectDataProvider implements vscode.TreeDataProvider<ProjTreeItem>, vsco
                     case 'MTI_GCC':
                         elfpath = prj.getExecutablePath();
                         elftool = [toolchain.getToolchainDir().path, 'bin', `${toolchainPrefix}nm${exeSuffix()}`].join(File.sep);
+                        cxxfilt = [toolchain.getToolchainDir().path, 'bin', `${toolchainPrefix}c++filt${exeSuffix()}`].join(File.sep);
                         elfcmds = sortType == 'size' ? ['-l', '-S', '--size-sort', elfpath] : ['-ln', '-S', elfpath];
                         elfsort = true;
                         symMatcher = /^(?<addr>[0-9a-f]+)\s+(?<size>[0-9a-f]+\s+)?(?<type>\w)\s+(?<name>[^\s]+)\s+(?<loca>.*)/i;
@@ -1914,6 +1917,7 @@ class ProjectDataProvider implements vscode.TreeDataProvider<ProjTreeItem>, vsco
                         // 20011c14 00000001 B __lock___libc_recursive_mutex
                         elfpath = prj.getExecutablePath();
                         elftool = [toolchain.getToolchainDir().path, 'bin', `llvm-nm${exeSuffix()}`].join(File.sep);
+                        cxxfilt = [toolchain.getToolchainDir().path, 'bin', `llvm-cxxfilt${exeSuffix()}`].join(File.sep);
                         elfcmds = sortType == 'size' ? ['-l', '-S', '--size-sort', elfpath] : ['-ln', '-S', elfpath];
                         elfsort = true;
                         symMatcher = /^(?<addr>[0-9a-f]+)\s+(?<size>[0-9a-f]+\s+)?(?<type>\w)\s+(?<name>[^\s]+)\s+(?<loca>.*)/i;
@@ -2039,6 +2043,10 @@ class ProjectDataProvider implements vscode.TreeDataProvider<ProjTreeItem>, vsco
                     let type = m.groups['type']?.trim();
                     let name = m.groups['name']?.trim();
                     let loca = m.groups['loca']?.trim();
+
+                    // C++ symbol name demangler
+                    if (cxxfilt)
+                        name = cxxDemangle(name, cxxfilt);
 
                     if (!addr || !name) {
                         continue;
