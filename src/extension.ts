@@ -387,6 +387,26 @@ async function checkAndInstallBuiltPyPkgs() {
     const resManager = ResManager.instance();
     const py3 = resManager.getPython3();
 
+    // python3 builtin pkg patch
+    const usrData = resManager.getAppUsrData() || {};
+    const wantedVer = 1;
+    if (usrData['python3_pkg_patch_ver'] !== wantedVer) {
+        const curVer = usrData['python3_pkg_patch_ver'] || '';
+        try {
+            if (!curVer) {
+                GlobalEvent.log_info(`reinstall jinja2`);
+                ChildProcess.execFileSync(py3, ['-m', 'pip', 'uninstall', '-y', 'jinja2']);
+                ChildProcess.execFileSync(py3, ['-m', 'pip', '--no-cache-dir', 'install', './Jinja2-2.11.3-py2.py3-none-any.whl'], {
+                    cwd: resManager.GetAppDataDir().path
+                });
+            }
+            GlobalEvent.log_info(`builtin pkg patch done.`);
+            resManager.setAppUsrData('python3_pkg_patch_ver', wantedVer);
+        } catch (error) {
+            GlobalEvent.log_error(error);
+        }
+    }
+
     const builtin_pkgs: { [name: string]: string } = {
         'pyserial': 'pyserial-3.5-py2.py3-none-any.whl'
     };
