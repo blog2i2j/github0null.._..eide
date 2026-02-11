@@ -227,7 +227,7 @@
         "optimization-lto": {
             "type": "selectable",
             "command": {
-                "true": "-flto",
+                "true": "-flto=auto",
                 "false": ""
             },
             "group": [
