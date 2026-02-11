@@ -449,7 +449,7 @@ class SourceRootList implements SourceProvider {
     private _add(dir: File): SourceRootInfo {
         const key: string = this.project.toRelativePath(dir.path);
         const watcher = platform.createSafetyFileWatcher(dir, true);
-        watcher.on('error', (err) => GlobalEvent.log_warn(err));
+        watcher.on('error', (err) => GlobalEvent.log_error(err));
         const sourceInfo = this.newSourceInfo(key, watcher);
         this.srcFolderMaps.set(key, sourceInfo);
         return sourceInfo;
