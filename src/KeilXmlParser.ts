@@ -726,6 +726,17 @@ class ARMParser extends KeilParser<KeilARMOption> {
                         }
                     }
                 }
+
+                // asm defines
+                // TargetOption.TargetArmAds.Aads.VariousControls.Define
+                try {
+                    const s = targetOptionObj.TargetArmAds.Aads.VariousControls.Define || '';
+                    if (optionData['asm-compiler'] == undefined)
+                        optionData['asm-compiler'] = {};
+                    optionData['asm-compiler']['defines'] = this.parseMacroString(s);
+                } catch (error) {
+                    //nothing todo
+                }
             }
 
             // parse builder tasks
@@ -1369,7 +1380,12 @@ class ARMParser extends KeilParser<KeilARMOption> {
             .join(';');
 
         target.TargetOption.TargetArmAds.Cads.VariousControls.Define = mergedDep.defineList.join(","); // C/CPP
-        target.TargetOption.TargetArmAds.Aads.VariousControls.Define = mergedDep.defineList.join(","); // ASM
+
+        const builderOpts = prj.getBuilderOptions();
+        if (builderOpts["asm-compiler"]) {
+            const defines = builderOpts["asm-compiler"]['defines'] || [];
+            target.TargetOption.TargetArmAds.Aads.VariousControls.Define = defines.join(","); // ASM
+        }
 
         this.setOption(target.TargetOption, prj);
 

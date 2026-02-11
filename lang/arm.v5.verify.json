@@ -292,8 +292,8 @@
                 "defines": {
                     "readable_name": "Preprocessor Definitions",
                     "readable_name.zh-cn": "预处理器定义",
-                    "markdownDescription": "Macro Defines (format: \"<key> SETA <value>\")",
-                    "description.zh-cn": "宏定义（格式：\"<key> SETA <value>\"）",
+                    "markdownDescription": "Macro Defines",
+                    "description.zh-cn": "宏定义",
                     "type": "array",
                     "items": {
                         "type": "string"
