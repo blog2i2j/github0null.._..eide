@@ -122,6 +122,11 @@ You can build this project by your self.
 > [!NOTE]  
 > There may be syntax errors when opening project source code using VSCode, this is because the project uses an older Version of TypeScript, please press `Ctrl+Shift+P` to execute `TypeScript: Select TypeScript Version...` and select version: `v3.9.x`.
 
+## Contribution Guidelines
+
+If you have any good ideas, you can first put forward your suggestions in the issue section. If they are feasible, we will implement them later. If you want to add features by yourself, please also share your ideas at the very beginning (otherwise, we cannot guarantee that your PR will be merged). 
+If you are ready and have completed the debugging and testing, then you can submit a pull request request to the dev branch. Thanks.
+
 ## Sponsor 👍
 
 [Sponsor The Author](https://em-ide.com/sponsor)

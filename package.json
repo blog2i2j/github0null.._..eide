@@ -36,7 +36,7 @@
     "homepage": "https://em-ide.com",
     "license": "MIT",
     "description": "A mcu development environment for 8051/AVR/STM8/Cortex-M/MIPS/RISC-V",
-    "version": "3.26.1",
+    "version": "3.26.2",
     "preview": false,
     "engines": {
         "vscode": "^1.67.0"
@@ -126,7 +126,7 @@
         "customEditors": [
             {
                 "viewType": "cl.eide.map.view",
-                "displayName": "MapView",
+                "displayName": "eide map view",
                 "selector": [
                     {
                         "filenamePattern": "*.map.view"
@@ -444,7 +444,7 @@
                         "type": "boolean",
                         "scope": "resource",
                         "markdownDescription": "%settings.armcc.convert.axf%",
-                        "default": false
+                        "default": true
                     },
                     "EIDE.STM8.STVP.CliExePath": {
                         "type": "string",
@@ -726,22 +726,6 @@
                     "dark": "./res/icon/Import_16x.svg",
                     "light": "./res/icon/Import_16x.svg"
                 }
-            },
-            {
-                "command": "_cl.eide.project.symbol_view.sort_by_addr",
-                "title": "Sort By Address"
-            },
-            {
-                "command": "_cl.eide.project.symbol_view.sort_by_size",
-                "title": "Sort By Size"
-            },
-            {
-                "command": "_cl.eide.project.symbol_view.disp_hide_no_sized",
-                "title": "Hide no-size Symbols"
-            },
-            {
-                "command": "_cl.eide.project.symbol_view.disp_show_all",
-                "title": "Show All Symbols"
             },
             {
                 "command": "_cl.eide.project.static-check.cppcheck",
@@ -1265,26 +1249,6 @@
                     "command": "_cl.eide.project.source.show_cmsis_config_wizard",
                     "group": "commands",
                     "when": "resourceLangId =~ /^c$|^cpp$/ && !config.EIDE.Option.DisableEditorContextMenu"
-                },
-                {
-                    "command": "_cl.eide.project.symbol_view.sort_by_addr",
-                    "group": "commands",
-                    "when": "resourceExtname =~ /\\.elf-symbols$/ && cl.eide.projectActived"
-                },
-                {
-                    "command": "_cl.eide.project.symbol_view.sort_by_size",
-                    "group": "commands",
-                    "when": "resourceExtname =~ /\\.elf-symbols$/ && cl.eide.projectActived"
-                },
-                {
-                    "command": "_cl.eide.project.symbol_view.disp_hide_no_sized",
-                    "group": "commands",
-                    "when": "resourceExtname =~ /\\.elf-symbols$/ && cl.eide.projectActived"
-                },
-                {
-                    "command": "_cl.eide.project.symbol_view.disp_show_all",
-                    "group": "commands",
-                    "when": "resourceExtname =~ /\\.elf-symbols$/ && cl.eide.projectActived"
                 }
             ],
             "explorer/context": [

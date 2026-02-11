@@ -6,6 +6,24 @@ All notable version changes will be recorded in this file.
 
 ***
 
+### [v3.26.2] revision
+
+**New**:
+  - `Symbol Table View`: New symbol table UI (with c++ symbol name demangler).
+
+**Fix**:
+  - `Toolchain Options`: Fix [issue 495](https://github.com/github0null/eide/issues/495)
+  - `Project Importer`: Fix [issue 491](https://github.com/github0null/eide/issues/491)
+  - `axf2elf Tool`: ELF files too large when addresses not contiguous. [PR 6](https://github.com/github0null/eide_tools/pull/6)
+
+**Improve**:
+  - `unify_builder`: Use independent lock file instead of `unify_builder.log` file.
+  - `Debug Config Provider`: Add chipDescriptionPath support for probe-rs. [PR 499](https://github.com/github0null/eide/pull/499)
+  - `memap View`: Update memap command.
+  - `Intellisense Provider`: Update armclang lint file.
+
+***
+
 ### [v3.26.1] revision
 
 **Fix**:

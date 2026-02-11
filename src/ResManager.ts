@@ -580,8 +580,6 @@ export class ResManager extends events.EventEmitter {
 
     private loadJlinkInternalDevs(): boolean | undefined {
 
-        let file: File = File.fromArray([this.GetAppDataDir().path, 'JLinkDevices.xml']);
-
         /* get jlink internal device list */
         const jlinkExe = SettingManager.instance().getJlinkExePath();
         const timestamp = Date.now();
@@ -595,12 +593,11 @@ export class ResManager extends events.EventEmitter {
         try { fs.unlinkSync(devXmlFile.path) } catch (error) { /* do nothing */ }
         try { ChildProcess.execSync(cmd) } catch (error) { /* do nothing */ }
         try { fs.unlinkSync(jlinkTmpCmdFile.path) } catch (error) { /* do nothing */ } // rm tmp file
-        if (devXmlFile.IsFile()) { file = devXmlFile; }
 
         try {
 
-            if (!file.IsFile()) {
-                throw Error(`Not found '${file.name}' file`);
+            if (!devXmlFile.IsFile()) {
+                throw Error(`Not found '${devXmlFile.name}' file`);
             }
 
             const parser = new x2js({
@@ -608,7 +605,7 @@ export class ResManager extends events.EventEmitter {
                 attributePrefix: '$'
             });
 
-            const dom = parser.xml2js<any>(file.Read());
+            const dom = parser.xml2js<any>(devXmlFile.Read());
 
             // rm tmp file
             if (devXmlFile.IsFile()) {
@@ -616,7 +613,7 @@ export class ResManager extends events.EventEmitter {
             }
 
             if (dom.DeviceDatabase == undefined) {
-                throw Error(`Not found 'DeviceDatabase' in devices xml, [file]: '${file.path}'`);
+                throw Error(`Not found 'DeviceDatabase' in devices xml, [file]: '${devXmlFile.path}'`);
             }
 
             let vendorInfo: any = dom.DeviceDatabase.VendorInfo;

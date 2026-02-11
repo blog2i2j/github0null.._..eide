@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Symbol Table Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* :root {
+      --vscode-editor-background: #1e1e1e;
+      --vscode-editor-foreground: #d4d4d4;
+      --vscode-editorWidget-background: #252526;
+      --vscode-editorWidget-foreground: #ffffff;
+      --vscode-editorWidget-border: #3c3c3c;
+      --vscode-list-hoverBackground: #2a2d2e;
+      --vscode-list-activeSelectionBackground: #094771;
+      --vscode-list-activeSelectionForeground: #ffffff;
+      --vscode-scrollbarSlider-background: rgba(121, 121, 121, 0.4);
+      --vscode-scrollbarSlider-hoverBackground: rgba(100, 100, 100, 0.7);
+      --vscode-input-background: #3c3c3c;
+      --vscode-input-foreground: #f0f0f0;
+      --vscode-input-border: #3c3c3c;
+      --vscode-input-placeholderForeground: #cccccc80;
+      --vscode-button-background: #0e639c;
+      --vscode-button-foreground: #ffffff;
+      --vscode-button-hoverBackground: #1177bb;
+      --vscode-badge-background: #4d4d4d;
+      --vscode-badge-foreground: #ffffff;
+      --vscode-focusBorder: #007acc;
+    } */
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      /*font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI",
+        system-ui, sans-serif;*/
+      background: var(--vscode-editor-background, #1e1e1e);
+      color: var(--vscode-editor-foreground, #d4d4d4);
+    }
+
+    .app {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--vscode-editorWidget-border, #3c3c3c);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .badge {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--vscode-badge-background, #4d4d4d);
+      color: var(--vscode-badge-foreground, #ffffff);
+      font-size: 11px;
+    }
+
+    .search-input {
+      padding: 4px 8px;
+      border-radius: 2px;
+      border: 1px solid var(--vscode-input-border, #3c3c3c);
+      background: var(--vscode-input-background, #3c3c3c);
+      color: var(--vscode-input-foreground, #f0f0f0);
+      font-size: 12px;
+      min-width: 180px;
+    }
+
+    .search-input::placeholder {
+      color: var(--vscode-input-placeholderForeground, #cccccc80);
+    }
+
+    .search-input:focus {
+      outline: 1px solid var(--vscode-focusBorder, #007acc);
+      outline-offset: -1px;
+    }
+
+    .content {
+      flex: 1;
+      padding: 8px 16px 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .table-wrapper {
+      flex: 1;
+      border-radius: 3px;
+      border: 1px solid var(--vscode-editorWidget-border, #3c3c3c);
+      background: var(--vscode-editorWidget-background, #252526);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .table-scroll {
+      flex: 1;
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      background: var(--vscode-editorWidget-background, #252526);
+      z-index: 1;
+    }
+
+    th,
+    td {
+      padding: 6px 10px;
+      text-align: left;
+      white-space: nowrap;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    th {
+      font-weight: 500;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: rgba(255, 255, 255, 0.7);
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+      background: inherit;
+    }
+
+    th.sortable:hover {
+      background: var(--vscode-list-hoverBackground, #2a2d2e);
+    }
+
+    th .sort-indicator {
+      margin-left: 4px;
+      opacity: 0.6;
+      font-size: 10px;
+      /* 固定宽度，避免不同箭头字符导致表头宽度变化 */
+      display: inline-block;
+      width: 1.2em;
+      text-align: center;
+    }
+
+    th.sorted {
+      color: var(--vscode-list-activeSelectionForeground, #ffffff);
+      /* 不用选中背景色，避免看起来像“焦点一直锁在表头” */
+      background: inherit;
+      border-bottom: 1px solid var(--vscode-list-activeSelectionBackground, #094771);
+    }
+
+    tbody tr:hover {
+      background: var(--vscode-list-hoverBackground, #2a2d2e);
+    }
+
+    /*tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.01);
+    }*/
+
+    .col-addr {
+      font-family: "Cascadia Code", "Fira Code", monospace;
+      font-size: 11px;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .col-size {
+      position: relative; /* 让伪元素只在当前单元格内绘制 */
+      padding: 0 10px;
+      text-align: right;
+      font-family: "Cascadia Code", "Fira Code", monospace;
+      font-size: 11px;
+      overflow: hidden;
+    }
+
+    .col-size::before {
+      content: "";
+      position: absolute;
+      left: 4px;
+      right: 4px;
+      top: 3px;
+      bottom: 3px;
+      border-radius: 2px;
+      background: linear-gradient(
+        90deg,
+        rgba(14, 99, 156, 0.65),
+        rgba(0, 122, 204, 0.7)
+      );
+      opacity: 0.45; /* 保证前景文字对比度 */
+      transform-origin: left center;
+      transform: scaleX(var(--size-fill, 0));
+    }
+
+    .col-size span {
+      position: relative;
+      z-index: 1;
+    }
+
+    .col-type,
+    .col-loca {
+      font-size: 11px;
+      opacity: 0.85;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .col-name {
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .footer {
+      padding: 4px 10px;
+      font-size: 11px;
+      opacity: 0.7;
+      border-top: 1px solid var(--vscode-editorWidget-border, #3c3c3c);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .muted {
+      opacity: 0.6;
+    }
+
+    /* 自定义滚动条（更接近 VS Code） */
+    .table-scroll::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    .table-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .table-scroll::-webkit-scrollbar-thumb {
+      background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
+      border-radius: 4px;
+    }
+
+    .table-scroll::-webkit-scrollbar-thumb:hover {
+      background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
+    }
+
+    /* 空数据状态 */
+    .empty-state {
+      padding: 24px;
+      text-align: center;
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    /* 行右键菜单 */
+    .context-menu {
+      position: fixed;
+      min-width: 160px;
+      padding: 4px 0;
+      border-radius: 3px;
+      background: var(--vscode-editorWidget-background, #252526);
+      color: var(--vscode-editorWidget-foreground, #ffffff);
+      border: 1px solid var(--vscode-editorWidget-border, #3c3c3c);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.45);
+      font-size: 12px;
+      z-index: 9999;
+      display: none;
+    }
+
+    .context-menu-item {
+      padding: 4px 12px;
+      cursor: default;
+      white-space: nowrap;
+    }
+
+    .context-menu-item:hover {
+      background: var(--vscode-list-hoverBackground, #2a2d2e);
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div>
+      <div class="title">Symbol Table</div>
+      <!--div class="subtitle">可视化查看与排序符号表</div-->
+    </div>
+    <div class="header-right">
+      <input
+        id="searchInput"
+        class="search-input"
+        type="text"
+        placeholder="Filter by name, type ..."
+      />
+      <span id="countBadge" class="badge">0 symbols</span>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="table-wrapper">
+      <div class="table-scroll">
+        <table>
+          <thead>
+          <tr>
+            <th class="sortable" data-key="addr">Address <span class="sort-indicator">↕</span></th>
+            <th class="sortable" data-key="size">Size <span class="sort-indicator">↕</span></th>
+            <th class="sortable" data-key="type">Type <span class="sort-indicator">↕</span></th>
+            <th class="sortable" data-key="name">Name <span class="sort-indicator">↕</span></th>
+          </tr>
+          </thead>
+          <tbody id="tableBody">
+          <!-- rows injected by JS -->
+          </tbody>
+        </table>
+        <div id="emptyState" class="empty-state" style="display: none;">
+          No Results !
+        </div>
+      </div>
+      <div class="footer">
+        <span id="totalSize">Total size: 0</span>
+        <span id="statusText" class="muted">Ready.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="rowContextMenu" class="context-menu">
+  <div id="menuGoToDef" class="context-menu-item">Go To Definition</div>
+</div>
+
+<script>
+  /**
+   * @typedef {Object} SymbolInfo
+   * @property {string} addr
+   * @property {string} size
+   * @property {string} type
+   * @property {string} name
+   * @property {string} loca
+   */
+
+  // eslint-disable-next-line no-undef
+  const vscode = acquireVsCodeApi();
+
+  /** 你自己的符号表数组：直接替换下面的示例数据即可 */
+  /** @type {SymbolInfo[]} */
+//   const symbols = [
+//     // 示例数据
+//     { addr: "0x1000", size: "64", type: "FUNC", name: "main", loca: ".text" },
+//     { addr: "0x1040", size: "128", type: "FUNC", name: "foo", loca: ".text" },
+//     { addr: "0x10C0", size: "32", type: "OBJ",  name: "global_var", loca: ".data" },
+//     { addr: "0x10E0", size: "16", type: "FUNC", name: "bar", loca: ".text" },
+//     { addr: "0x10F0", size: "256", type: "FUNC", name: "very_long_function_name_example", loca: "c:\\a\\b\\abc\\a.c" }
+//   ];
+
+  const symbols = $SYMBOL_TABLE;
+
+  /** 将字符串 size 解析为数字，兼容十进制 / 十六进制（带不带 0x） */
+  function parseSize(str) {
+    if (!str) return 0;
+    const s = String(str).trim();
+    if (!s) return 0;
+    if (s.startsWith("0x") || s.startsWith("0X")) {
+      const v = parseInt(s, 16);
+      return Number.isNaN(v) ? 0 : v;
+    }
+    // 尝试十进制
+    let v = parseInt(s, 10);
+    if (!Number.isNaN(v)) return v;
+    // 再尝试把它当作纯十六进制（不带 0x）
+    v = parseInt(s, 16);
+    return Number.isNaN(v) ? 0 : v;
+  }
+
+  function parseAddr(str) {
+    // 地址通常为十六进制，逻辑与 size 类似
+    if (!str) return 0;
+    const s = String(str).trim();
+    if (!s) return 0;
+    if (s.startsWith("0x") || s.startsWith("0X")) {
+      const v = parseInt(s, 16);
+      return Number.isNaN(v) ? 0 : v;
+    }
+    let v = parseInt(s, 16);
+    if (!Number.isNaN(v)) return v;
+    v = parseInt(s, 10);
+    return Number.isNaN(v) ? 0 : v;
+  }
+
+  const tableBody = document.getElementById("tableBody");
+  const emptyState = document.getElementById("emptyState");
+  const countBadge = document.getElementById("countBadge");
+  const totalSizeEl = document.getElementById("totalSize");
+  const statusText = document.getElementById("statusText");
+  const searchInput = document.getElementById("searchInput");
+  const headerCells = /** @type {NodeListOf<HTMLTableCellElement>} */ (
+    document.querySelectorAll("thead th.sortable")
+  );
+  const rowContextMenu = document.getElementById("rowContextMenu");
+  const menuGoToDef = document.getElementById("menuGoToDef");
+
+  /** @type {HTMLTableRowElement | null} */
+  let contextMenuRow = null;
+
+  let sortKey = "addr";     // 当前排序字段
+  let sortDir = "asc";      // "asc" | "desc"
+  let filterText = "";      // 过滤关键字（名称 / 类型 / loca）
+
+  function computeTotalSize(list) {
+    return list.reduce((sum, s) => sum + parseSize(s.size), 0);
+  }
+
+  function formatBytes(n) {
+    if (n < 1024) return n + " B";
+    const kb = n / 1024;
+    if (kb < 1024) return kb.toFixed(1) + " KB";
+    const mb = kb / 1024;
+    return mb.toFixed(2) + " MB";
+  }
+
+  function formatPercent(value, total) {
+    if (total <= 0) return "0.0%";
+    return ((value / total) * 100).toFixed(1) + "%";
+  }
+
+  function applyFilter(list) {
+    const t = filterText.trim().toLowerCase();
+    if (!t) return list;
+    return list.filter(s =>
+      (s.name && s.name.toLowerCase().includes(t)) ||
+      (s.type && s.type.toLowerCase().includes(t)) ||
+      (s.loca && s.loca.toLowerCase().includes(t))
+    );
+  }
+
+  function applySort(list) {
+    const sorted = [...list];
+    const dirFactor = sortDir === "asc" ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      let av, bv;
+      switch (sortKey) {
+        case "size":
+          av = parseSize(a.size);
+          bv = parseSize(b.size);
+          break;
+        case "addr":
+          av = parseAddr(a.addr);
+          bv = parseAddr(b.addr);
+          break;
+        case "type":
+          av = a.type || "";
+          bv = b.type || "";
+          return av.localeCompare(bv) * dirFactor;
+        case "name":
+          av = a.name || "";
+          bv = b.name || "";
+          return av.localeCompare(bv) * dirFactor;
+        default:
+          return 0;
+      }
+      if (av === bv) return 0;
+      return av > bv ? dirFactor : -dirFactor;
+    });
+
+    return sorted;
+  }
+
+  function updateHeaderSortState() {
+    headerCells.forEach(th => {
+      const key = th.getAttribute("data-key");
+      if (key === sortKey) {
+        th.classList.add("sorted");
+        const indicator = th.querySelector(".sort-indicator");
+        if (indicator) {
+          indicator.textContent = sortDir === "asc" ? "↑" : "↓";
+        }
+      } else {
+        th.classList.remove("sorted");
+        const indicator = th.querySelector(".sort-indicator");
+        if (indicator) {
+          indicator.textContent = "↕";
+        }
+      }
+    });
+  }
+
+  function hideContextMenu() {
+    if (rowContextMenu) {
+      rowContextMenu.style.display = "none";
+    }
+    contextMenuRow = null;
+  }
+
+  /**
+   * @param {MouseEvent} ev
+   * @param {HTMLTableRowElement} row
+   */
+  function showContextMenu(ev, row) {
+    if (!rowContextMenu) return;
+    ev.preventDefault();
+    contextMenuRow = row;
+
+    const menu = rowContextMenu;
+    const padding = 4;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let x = ev.clientX;
+    let y = ev.clientY;
+
+    menu.style.display = "block";
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+
+    const rect = menu.getBoundingClientRect();
+    if (x + rect.width + padding > viewportWidth) {
+      x = viewportWidth - rect.width - padding;
+    }
+    if (y + rect.height + padding > viewportHeight) {
+      y = viewportHeight - rect.height - padding;
+    }
+
+    menu.style.left = `${Math.max(x, padding)}px`;
+    menu.style.top = `${Math.max(y, padding)}px`;
+  }
+
+  function render() {
+    const filtered = applyFilter(symbols);
+    const sorted = applySort(filtered);
+    const totalSize = computeTotalSize(symbols);
+
+    tableBody.innerHTML = "";
+
+    if (sorted.length === 0) {
+      emptyState.style.display = "block";
+    } else {
+      emptyState.style.display = "none";
+      const fragment = document.createDocumentFragment();
+
+      for (const s of sorted) {
+        const tr = document.createElement("tr");
+        const sizeNum = parseSize(s.size);
+        const percent = totalSize > 0 ? (sizeNum / totalSize) : 0;
+
+        // 把 loca 信息挂在行元素上，供右键菜单回调使用
+        tr.dataset.loca = s.loca || "";
+
+        tr.innerHTML = `
+          <td class="col-addr" title="${s.addr || ""}">${s.addr || ""}</td>
+          <td class="col-size" style="--size-fill:${percent}" title="${s.size || ""}"><span>${s.size || ""}</span></td>
+          <td class="col-type" title="${s.type || ""}">${s.type || ""}</td>
+          <td class="col-name" title="${s.name || ""}">${s.name || ""}</td>
+        `;
+
+        // 为每一行添加右键菜单
+        tr.addEventListener("contextmenu", (ev) => {
+          showContextMenu(ev, tr);
+        });
+
+        fragment.appendChild(tr);
+      }
+
+      tableBody.appendChild(fragment);
+    }
+
+    countBadge.textContent = `${filtered.length} symbols`;
+    totalSizeEl.textContent = `Total size: ${formatBytes(totalSize)}`;
+    statusText.textContent = `Sort By: ${sortKey} (${sortDir}), Filter: "${filterText.trim()}"`;
+    updateHeaderSortState();
+  }
+
+  // 初始化事件
+  headerCells.forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.getAttribute("data-key");
+      if (!key) return;
+      if (sortKey === key) {
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+      } else {
+        sortKey = key;
+        sortDir = "asc";
+      }
+      render();
+    });
+  });
+
+  searchInput.addEventListener("input", (e) => {
+    filterText = e.target.value || "";
+    render();
+  });
+
+  // 右键菜单：点击空白处时关闭
+  document.addEventListener("click", () => {
+    hideContextMenu();
+  });
+
+  // 窗口变化 / 滚动时关闭菜单，避免飘在奇怪位置
+  window.addEventListener("resize", hideContextMenu);
+  window.addEventListener("scroll", hideContextMenu, true);
+
+  if (menuGoToDef) {
+    menuGoToDef.addEventListener("click", () => {
+      if (contextMenuRow) {
+        const loca = contextMenuRow.dataset.loca || "";
+        // TODO: 在这里使用 loca 做真正的 Go To Definition 逻辑
+        console.log("Go To Definition loca:", loca);
+        let absPath;
+        let lineNumber;
+        const m = /(.+?)(:\d+)?$/.exec(loca);
+        if (m && m.length > 1) {
+          absPath = m[1].trim();
+          if (m.length > 2 && m[2])
+            lineNumber = parseInt(m[2].substr(1));
+          vscode.postMessage({
+            id: 'symbol.gotoDefinition',
+            data: { abspath: absPath, line: lineNumber } // {abspath: string, line?: number}
+          });
+        }
+      }
+      hideContextMenu();
+    });
+  }
+
+  // 初始化渲染
+  render();
+</script>
+</body>
+</html>

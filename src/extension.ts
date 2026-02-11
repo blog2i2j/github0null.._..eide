@@ -195,17 +195,6 @@ export async function activate(context: vscode.ExtensionContext) {
     subscriptions.push(vscode.commands.registerCommand('_cl.eide.project.import.ext.source.struct', (item) => projectExplorer.ImportSourceFromExtProject(item)));
     subscriptions.push(vscode.commands.registerCommand('_cl.eide.project.source.modify.exclude_list', (item) => projectExplorer.openYamlConfig(item, 'src-exc-cfg')));
 
-    // symbol view editor commands
-    const virtDoc = VirtualDocument.instance();
-    subscriptions.push(vscode.commands.registerCommand('_cl.eide.project.symbol_view.sort_by_addr',
-        (url) => virtDoc.updateDocument(url.fsPath, undefined, 'addr', virtDoc.getLastGetterArgs(url.fsPath)[1])));
-    subscriptions.push(vscode.commands.registerCommand('_cl.eide.project.symbol_view.sort_by_size',
-        (url) => virtDoc.updateDocument(url.fsPath, undefined, 'size', virtDoc.getLastGetterArgs(url.fsPath)[1])));
-    subscriptions.push(vscode.commands.registerCommand('_cl.eide.project.symbol_view.disp_hide_no_sized',
-        (url) => virtDoc.updateDocument(url.fsPath, undefined, virtDoc.getLastGetterArgs(url.fsPath)[0], 'hide_no_sized')));
-    subscriptions.push(vscode.commands.registerCommand('_cl.eide.project.symbol_view.disp_show_all',
-        (url) => virtDoc.updateDocument(url.fsPath, undefined, virtDoc.getLastGetterArgs(url.fsPath)[0], 'show_all')));
-
     // filesystem files
     subscriptions.push(vscode.commands.registerCommand('_cl.eide.project.source.filesystem_folder_add_file', (item) => projectExplorer.fs_folderAddFile(item)));
     subscriptions.push(vscode.commands.registerCommand('_cl.eide.project.source.filesystem_folder_add', (item) => projectExplorer.fs_folderAdd(item)));
@@ -397,6 +386,26 @@ async function checkAndInstallBuiltPyPkgs() {
 
     const resManager = ResManager.instance();
     const py3 = resManager.getPython3();
+
+    // python3 builtin pkg patch
+    const usrData = resManager.getAppUsrData() || {};
+    const wantedVer = 1;
+    if (usrData['python3_pkg_patch_ver'] !== wantedVer) {
+        const curVer = usrData['python3_pkg_patch_ver'] || '';
+        try {
+            if (!curVer) {
+                GlobalEvent.log_info(`reinstall jinja2`);
+                ChildProcess.execFileSync(py3, ['-m', 'pip', 'uninstall', '-y', 'jinja2']);
+                ChildProcess.execFileSync(py3, ['-m', 'pip', '--no-cache-dir', 'install', './Jinja2-2.11.3-py2.py3-none-any.whl'], {
+                    cwd: resManager.GetAppDataDir().path
+                });
+            }
+            GlobalEvent.log_info(`builtin pkg patch done.`);
+            resManager.setAppUsrData('python3_pkg_patch_ver', wantedVer);
+        } catch (error) {
+            GlobalEvent.log_error(error);
+        }
+    }
 
     const builtin_pkgs: { [name: string]: string } = {
         'pyserial': 'pyserial-3.5-py2.py3-none-any.whl'
@@ -1238,7 +1247,7 @@ async function InitComponents(context: vscode.ExtensionContext): Promise<boolean
         }
     });
 
-    // register map view provider
+    // register custom editor provider
     context.subscriptions.push(
         vscode.window.registerCustomEditorProvider('cl.eide.map.view',
             new MapViewEditorProvider(), { webviewOptions: { enableFindWidget: true } }));
@@ -1589,9 +1598,9 @@ class EideTerminalProvider implements vscode.TerminalProfileProvider {
     }
 }
 
-///////////////////////////////////////////////////
-// --- .mapView viewer
-///////////////////////////////////////////////////
+//-------------------------------------------------
+//- .mapView viewer
+//-------------------------------------------------
 
 import { FileWatcher } from '../lib/node-utility/FileWatcher';
 import { ToolchainManager, ToolchainName } from './ToolchainManager';
@@ -1799,8 +1808,10 @@ class MapViewEditorProvider implements vscode.CustomTextEditorProvider {
                         }
 
                         if (os.platform() == 'win32') {
+                            // "%USERPROFILE%\.eide\bin\python36\python3" -m memap %*
+                            const py3 = ResManager.instance().getPython3();
                             lines = ChildProcess
-                                .execSync(`memap -t ${memapTyp} -d ${vInfo.treeDepth} "${vInfo.mapPath}"`)
+                                .execFileSync(py3, ['-m', 'memap', '-t', memapTyp, '-d', vInfo.treeDepth.toString(), vInfo.mapPath])
                                 .toString().split(/\r\n|\n/);
                         } else {
                             const memapRoot = ResManager.GetInstance().getLegacyBuilderDir().path + File.sep + 'utils';
@@ -2200,6 +2211,18 @@ class ExternalDebugConfigProvider implements vscode.DebugConfigurationProvider {
                 let m = /--probe (\w+\:\w+(?:\:\w+)?)/.exec(flasherCfg.otherOptions);
                 if (m && m.length > 1) {
                     dbgCfg['probe'] = m[1];
+                }
+                // parse '--chip-description-path <path>' (support quoted path)
+                // examples:
+                //   --chip-description-path /path/to/desc.yaml
+                //   --chip-description-path "/path/with spaces/desc.yaml"
+                m = /--chip-description-path\s+("[^"]+"|[^\s]+)/.exec(flasherCfg.otherOptions);
+                if (m && m.length > 1) {
+                    let p = m[1];
+                    // strip surrounding quotes if present
+                    if (p.startsWith('"') && p.endsWith('"'))
+                        p = p.substring(1, p.length - 1);
+                    dbgCfg['chipDescriptionPath'] = p;
                 }
             }
             result.push(dbgCfg);

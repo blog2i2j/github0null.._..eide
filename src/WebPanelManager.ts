@@ -25,7 +25,7 @@
 import * as vscode from "vscode";
 import { File } from "../lib/node-utility/File";
 import { ResManager } from "./ResManager";
-import { AbstractProject } from "./EIDEProject";
+import { AbstractProject, SymbolInfo } from "./EIDEProject";
 import { ArmBaseCompileConfigModel } from "./EIDEProjectModules";
 import { GlobalEvent } from "./GlobalEvents";
 import { view_str$compile$options, view_str$compile$storageLayout, 
@@ -474,5 +474,53 @@ export class WebPanelManager {
             });
 
         panel.reveal();
+    }
+
+    async showSymbolTable(project: AbstractProject) {
+
+        const panelOptions: vscode.WebviewPanelOptions & vscode.WebviewOptions = {
+            enableScripts: true,
+            retainContextWhenHidden: true
+        };
+
+        const webviewPanel = vscode.window.createWebviewPanel(
+            'symbol_table',
+            `Symbol Table (${NodePath.basename(project.getExecutablePath())})`,
+            vscode.ViewColumn.Active,
+            panelOptions
+        );
+
+        const symbols = await vscode.window.withProgress<SymbolInfo[]>({
+            location: vscode.ProgressLocation.Notification,
+            title: `Parse Symbol Table`
+        }, (progress) => project.parseElfSymbolTable());
+
+        const resManager = ResManager.GetInstance();
+        const htmlTemplate = File.from(resManager.GetHTMLDir().path, 'symbol_table', 'index.html');
+
+        const showTextDocumentAtLine = (filepath: string, lineNumber?: number) => {
+            let range: vscode.Range | undefined;
+            if (lineNumber !== undefined) {
+                range = new vscode.Range(
+                    new vscode.Position(lineNumber - 1, 0),
+                    new vscode.Position(lineNumber - 1, 0));
+            }
+            vscode.window.showTextDocument(vscode.Uri.file(filepath), {
+                preview: true,
+                selection: range
+            });
+        };
+
+        webviewPanel.iconPath = vscode.Uri.file(ResManager.GetInstance().GetIconByName('Table_16x.svg').path);
+        webviewPanel.webview.html = htmlTemplate.Read().replace('$SYMBOL_TABLE', JSON.stringify(symbols));
+        webviewPanel.webview.onDidReceiveMessage(async (_message: any) => {
+            const msg: {id: string, data: any} = <any>_message;
+            if (msg.id === 'symbol.gotoDefinition') {
+                const inf = <{abspath: string, line?: number}>msg.data;
+                showTextDocumentAtLine(inf.abspath, inf.line);
+            }
+        });
+
+        webviewPanel.reveal();
     }
 }

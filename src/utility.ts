@@ -49,6 +49,23 @@ export const TIME_ONE_MINUTE = 60 * 1000;
 export const TIME_ONE_HOUR = 3600 * 1000;
 export const TIME_ONE_DAY = 24 * 3600 * 1000;
 
+/**
+ * It's a symbol demangler that can be used as a replacement for the GNU c++filt tool. 
+ * It takes a series of symbol names and prints their demangled form on the standard output stream. 
+ * If a name cannot be demangled, it is simply printed as is.
+ * 
+ * example: 
+ * _ZN10__cxxabiv120__unexpected_handlerE   ->   __cxxabiv1::__unexpected_handler
+*/
+export function cxxDemangle(name: string, cxxfilt_path?: string): string {
+    cxxfilt_path = cxxfilt_path || `arm-none-eabi-c++filt${platform.exeSuffix()}`;
+    try {
+        return child_process.execFileSync(cxxfilt_path, [name]).toString().trim();
+    } catch (error) {
+        return name;
+    }
+}
+
 export function parseCliArgs(cliStr: string): string[] {
 
     let argsLi: string[] = [];

@@ -417,12 +417,8 @@ typedef struct
 #define __builtin_arm_isb(x)
 #define __builtin_arm_dsb(x)
 #define __builtin_arm_dmb(x)
-
-#define __builtin_bswap32(x) (x)
-#define __builtin_bswap16(x) (x)
 #define __builtin_arm_rbit(x) (x)
 
-#define __builtin_clz(x) (x)
 #define __builtin_arm_ldrex(x) (x)
 #define __builtin_arm_strex(val, ptr) (val)
 #define __builtin_arm_ldrex(ptr) (ptr)
@@ -431,3 +427,45 @@ typedef struct
 #define __builtin_arm_usat(val, sat) (sat)
 #define __builtin_arm_ldaex(ptr) (ptr)
 #define __builtin_arm_stlex(val, ptr) (val)
+
+// clang 20.1 built-in functions
+
+#define __builtin_addressof(x) ((void *)0)
+#define __builtin_constant_p(expression) 0
+#define __builtin_expect(expression, val) 0
+#define __builtin_add_overflow(a, b, result_ptr) 0
+#define __builtin_mul_overflow(a, b, result_ptr) 0
+#define __builtin_sadd_overflow(a, b, result_ptr) 0
+#define __builtin_sub_overflow(a, b, result_ptr) 0
+
+extern void *__builtin_alloca(int n);
+extern void *__builtin_alloca_uninitialized(int n);
+extern unsigned short __builtin_bswap16(unsigned short x);
+extern unsigned int __builtin_bswap32(unsigned int x);
+extern unsigned long long __builtin_bswap64(unsigned long long x);
+extern int __builtin_clz(unsigned int x);
+extern int __builtin_clzl(unsigned long x);
+extern int __builtin_clzll(unsigned long long x);
+extern int __builtin_ctz(unsigned int x);
+extern int __builtin_ctzl(unsigned long x);
+extern int __builtin_ctzll(unsigned long long x);
+extern int __builtin_eh_return_data_regno(int n);
+extern void *__builtin_extend_pointer(void *ptr);
+extern void *__builtin_extract_return_addr(void *addr);
+extern int __builtin_ffs (int x);
+extern int __builtin_ffsl (long x);
+extern int __builtin_ffsll (long long x);
+extern void* __builtin_frame_address(unsigned int level);
+extern void __builtin_is_constant_evaluated();
+extern long __builtin_labs (long x);
+extern void* __builtin_launder(void* ptr);
+extern long long __builtin_llabs(long long x);
+extern int __builtin_object_size(const void *ptr, int type);
+extern int __builtin_popcount(unsigned int x);
+extern int __builtin_popcountl(unsigned long x);
+extern int __builtin_popcountll(unsigned long long x);
+extern void __builtin_prefetch(const void *addr, int rw, int locality);
+extern void* __builtin_return_address(unsigned int level);
+extern void* __builtin_thread_pointer(void);
+extern void __builtin_trap();
+extern void __builtin_unreachable();

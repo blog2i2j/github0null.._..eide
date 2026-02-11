@@ -57,7 +57,11 @@ import { HexUploaderType } from './HexUploader';
 import { WebPanelManager } from './WebPanelManager';
 import { DependenceManager } from './DependenceManager';
 import * as platform from './Platform';
-import { md5, copyObject, compareVersion, isGccFamilyToolchain, deepCloneObject, notifyReloadWindow, copyAndMakeObjectKeysToLowerCase, runShellCommand, execInternalCommand } from './utility';
+import {
+    md5, copyObject, compareVersion, isGccFamilyToolchain, deepCloneObject, 
+    notifyReloadWindow, copyAndMakeObjectKeysToLowerCase, runShellCommand, 
+    execInternalCommand, cxxDemangle
+} from './utility';
 import { ResInstaller } from './ResInstaller';
 import {
     view_str$prompt$filesOptionsComment,
@@ -74,7 +78,7 @@ import {
     view_str$prompt$migrationFailed,
 } from './StringTable';
 import { SettingManager } from './SettingManager';
-import { ExeCmd } from '../lib/node-utility/Executable';
+import { ExeCmd, ExeFile } from '../lib/node-utility/Executable';
 import { jsonc } from 'jsonc';
 import * as iconv from 'iconv-lite';
 import * as globmatch from 'micromatch'
@@ -445,7 +449,7 @@ class SourceRootList implements SourceProvider {
     private _add(dir: File): SourceRootInfo {
         const key: string = this.project.toRelativePath(dir.path);
         const watcher = platform.createSafetyFileWatcher(dir, true);
-        watcher.on('error', (err) => GlobalEvent.log_warn(err));
+        watcher.on('error', (err) => GlobalEvent.log_error(err));
         const sourceInfo = this.newSourceInfo(key, watcher);
         this.srcFolderMaps.set(key, sourceInfo);
         return sourceInfo;
@@ -797,6 +801,14 @@ export interface SourceFileOptions {
     version: string;
     options: { [target: string]: SourceExtraCompilerOptionsCfg };
 };
+
+export interface SymbolInfo {
+    addr: string;
+    size: string;
+    type: string;
+    name: string;
+    loca: string;
+}
 
 export type DataChangeType = 'pack' | 'dependence' | 'compiler' | 'uploader' | 'files';
 export const EIDE_FILE_OPTION_VERSION = '2.1'
@@ -2522,6 +2534,325 @@ $(OUT_DIR):
 
     getBuilderOptions(): BuilderOptions {
         return this.GetConfiguration().toolchainConfigModel.getOptions();
+    }
+
+    /*
+      文档：https://sourceware.org/binutils/docs-2.39/binutils.html#nm 
+      下面说明符号类型：对于每一个符号来说，其类型如果是小写的，则表明该符号是local的；大写则表明该符号是global(external)的。
+        A	该符号的值是绝对的，在以后的链接过程中，不允许进行改变。这样的符号值，常常出现在中断向量表中，例如用符号来表示各个中断向量函数在中断向量表中的位置。
+        B	该符号的值出现在非初始化数据段(bss)中。例如，在一个文件中定义全局static int test。则该符号test的类型为b，位于bss section中。其值表示该符号在bss段中的偏移。一般而言，bss段分配于RAM中
+        C	该符号为common。common symbol是未初始话数据段。该符号没有包含于一个普通section中。只有在链接过程中才进行分配。符号的值表示该符号需要的字节数。例如在一个c文件中，定义int test，并且该符号在别的地方会被引用，则该符号类型即为C。否则其类型为B。
+        D	该符号位于初始话数据段中。一般来说，分配到data section中。例如定义全局int baud_table[5] = {9600, 19200, 38400, 57600, 115200}，则会分配于初始化数据段中。
+        G	该符号也位于初始化数据段中。主要用于small object提高访问small data object的一种方式。
+        I	该符号是对另一个符号的间接引用。
+        N	该符号是一个debugging符号。
+        R	该符号位于只读数据区。例如定义全局const int test[] = {123, 123};则test就是一个只读数据区的符号。注意在cygwin下如果使用gcc直接编译成MZ格式时，源文件中的test对应_test，并且其符号类型为D，即初始化数据段中。但是如果使用m6812-elf-gcc这样的交叉编译工具，源文件中的test对应目标文件的test,即没有添加下划线，并且其符号类型为R。一般而言，位于rodata section。值得注意的是，如果在一个函数中定义const char *test = “abc”, const char test_int = 3。使用nm都不会得到符号信息，但是字符串“abc”分配于只读存储器中，test在rodata section中，大小为4。
+        S	符号位于非初始化数据区，用于small object。
+        T	该符号位于代码区text section。
+        U	该符号在当前文件中是未定义的，即该符号的定义在别的文件中。例如，当前文件调用另一个文件中定义的函数，在这个被调用的函数在当前就是未定义的；但是在定义它的文件中类型是T。但是对于全局变量来说，在定义它的文件中，其符号类型为C，在使用它的文件中，其类型为U。
+        V	该符号是一个weak object。
+        W	The symbol is a weak symbol that has not been specifically tagged as a weak object symbol. 未明确指定的弱链接符号；同链接的其他对象文件中有它的定义就用上，否则就用一个系统特别指定的默认值。
+        -	该符号是a.out格式文件中的stabs symbol。
+        ?	该符号类型没有定义
+    */
+    private convGnuSymbolType2ReadableString(typ: string): string {
+
+        let typeStr: string | undefined;
+
+        switch (typ.toLowerCase()) {
+            case 'a':
+                typeStr = 'ABS'
+                break;
+            case 'b':
+                typeStr = 'BSS'
+                break;
+            case 'c':
+                typeStr = 'COMMON'
+                break;
+            case 'd':
+                typeStr = 'DATA'
+                break;
+            case 'i':
+                typeStr = `Indirect Reference`
+                break;
+            case 'n':
+                typeStr = `Debug`
+                break;
+            case 'r':
+                typeStr = `DATA (Read Only)`
+                break;
+            case 't':
+                typeStr = `TEXT`
+                break;
+            case 'u':
+                typeStr = `Undefined`
+                break;
+            case 'v':
+                typeStr = `Weak`
+                break;
+            case 'w':
+                typeStr = `Weak (unspecified)`
+                break;
+            default:
+                break;
+        }
+
+        if (typeStr) {
+            if (typ.toLowerCase() == typ) { // is a lowercase word
+                typeStr += ' (Local)'
+            }
+        }
+
+        if (typeStr) {
+            return `${typ}: ${typeStr}`;
+        }
+
+        return typ;
+    }
+
+    parseElfSymbolTable(): Promise<SymbolInfo[]> {
+
+        return new Promise(async (resolve) => {
+
+            const prj = this;
+            const allSymbols: SymbolInfo[] = [];
+
+            try {
+
+                const toolchain = prj.getToolchain();
+                const toolchainPrefix = toolchain.getToolchainPrefix ? toolchain.getToolchainPrefix() : '';
+
+                let elfpath = '';
+                let elftool = '';
+                let elfcmds = [''];
+                let cxxfilt: string | undefined; // c++filt tools
+
+                let staMatcher: RegExp | undefined;
+                let endMatcher: RegExp | undefined;
+                let symMatcher: RegExp | undefined;
+                let symTypConv: ((type: string) => string) | undefined;
+                let locMatcher: RegExp | undefined;
+
+                // sometimes a long line has been truncated, like this:
+                //  4183: Temperature_Sampling_NVIC_Configuration
+                //                              0x800f4d1   5 Code Gb   0x38
+                // we need match and recover them !
+                let truncatStaMatcher: RegExp | undefined;
+                let truncatEndMatcher: RegExp | undefined;
+
+                switch (toolchain.name) {
+                    // armcc fmt: 
+                    //   #  Symbol Name                Value      Bind  Sec  Type  Vis  Size
+                    case 'AC5':
+                    case 'AC6':
+                        elfpath = prj.getExecutablePath();
+                        elftool = [toolchain.getToolchainDir().path, 'bin', `fromelf${platform.exeSuffix()}`].join(File.sep);
+                        elfcmds = ['--text', '-s', elfpath];
+                        staMatcher = /\(SHT_SYMTAB\)/
+                        endMatcher = /^\*\* Section/
+                        truncatStaMatcher = /^\s*\d+\s+(?:[^\s]+)\s*$/i
+                        truncatEndMatcher = /^\s*0x[0-9a-f]+\s+/i
+                        symMatcher = /^\s*\d+\s+(?<name>[^\s]+)\s+(?<addr>0x[0-9a-f]+)\s+(?:[^\s]+)\s+(?:[^\s]+)\s+(?<type>[^\s]+)\s+(?:[^\s]+)(?<size>\s+[^\s]+)?/i
+                        break;
+                    // iar fmt:
+                    //   # Name                                Value      Sec Type Bd Size   Group Other
+                    case 'IAR_ARM':
+                        elfpath = prj.getExecutablePath();
+                        elftool = [toolchain.getToolchainDir().path, 'bin', `ielfdumparm${platform.exeSuffix()}`].join(File.sep);
+                        elfcmds = ['-s', '.symtab', elfpath];
+                        symMatcher = /^\s*\d+:\s+(?<name>[^\s]+)\s+(?<addr>0x[0-9a-f]+)\s+(?:[^\s]+)\s+(?<type>[^\s]+\s+[^\s]+)(?<size>\s+0x[0-9a-f]+)?/i;
+                        truncatStaMatcher = /^\s*\d+:\s+(?:[^\s]+)\s*$/i
+                        truncatEndMatcher = /^\s*0x[0-9a-f]+\s+/i
+                        break;
+                    case 'IAR_STM8':
+                        elfpath = prj.getExecutablePath();
+                        elftool = [toolchain.getToolchainDir().path, 'stm8', 'bin', `ielfdumpstm8${platform.exeSuffix()}`].join(File.sep);
+                        elfcmds = ['-s', '.symtab', elfpath];
+                        symMatcher = /^\s*\d+:\s+(?<name>[^\s]+)\s+(?<addr>0x[0-9a-f]+)\s+(?:[^\s]+)\s+(?<type>[^\s]+\s+[^\s]+)(?<size>\s+0x[0-9a-f]+)?/i;
+                        truncatStaMatcher = /^\s*\d+:\s+(?:[^\s]+)\s*$/i
+                        truncatEndMatcher = /^\s*0x[0-9a-f]+\s+/i
+                        break;
+                    case 'GCC':
+                    case 'RISCV_GCC':
+                    case 'ANY_GCC':
+                    case 'MIPS_GCC':
+                    case 'MTI_GCC':
+                        elfpath = prj.getExecutablePath();
+                        elftool = [toolchain.getToolchainDir().path, 'bin', `${toolchainPrefix}nm${platform.exeSuffix()}`].join(File.sep);
+                        cxxfilt = [toolchain.getToolchainDir().path, 'bin', `${toolchainPrefix}c++filt${platform.exeSuffix()}`].join(File.sep);
+                        elfcmds = ['-ln', '-S', elfpath];
+                        symMatcher = /^(?<addr>[0-9a-f]+)\s+(?<size>[0-9a-f]+\s+)?(?<type>\w)\s+(?<name>[^\s]+)\s+(?<loca>.*)/i;
+                        symTypConv = (t) => this.convGnuSymbolType2ReadableString(t)
+                        break;
+                    case 'COSMIC_STM8':
+                        // cobj -s .\stm8-cosmic.sm8
+                        //  __memory:       0000001a section .bss defined public
+                        //  __stack:        000003ff section absolute defined public absolute
+                        //  c_y:            00000007 section .ubsct defined public zpage
+                        //  f_exit:         00008221 section .text defined public
+                        //  f_main:         00008165 section .text defined public
+                        elfpath = prj.getExecutablePath();
+                        elftool = [toolchain.getToolchainDir().path, `cobj${platform.exeSuffix()}`].join(File.sep);
+                        elfcmds = ['-s', elfpath];
+                        symMatcher = /^\s*(?<name>\w+):\s+(?<addr>[0-9a-f]+)\s+\w+\s+(?<type>[\w\.]+)/i;
+                        break;
+                    case 'LLVM_ARM':
+                        // 2001132c 000002d0 B hUsbDeviceFS        c:\Users\xx+FatFs+USB_device_demo-template\./USB_DEVICE/App\usb_device.c:45
+                        // 200115fc 00000200 B USBD_StrDesc        c:\Users\xx+FatFs+USB_device_demo-template\./USB_DEVICE/App\usbd_desc.c:235
+                        // 200117fc 0000040c B hpcd_USB_OTG_FS     c:\Users\xx+FatFs+USB_device_demo-template\./USB_DEVICE/Target\usbd_conf.c:41
+                        // 20011c08 00000004 B __malloc_free_list
+                        // 20011c0c 00000004 B __malloc_sbrk_top
+                        // 20011c10 00000004 B __malloc_sbrk_start
+                        // 20011c14 00000001 B __lock___libc_recursive_mutex
+                        elfpath = prj.getExecutablePath();
+                        elftool = [toolchain.getToolchainDir().path, 'bin', `llvm-nm${platform.exeSuffix()}`].join(File.sep);
+                        cxxfilt = [toolchain.getToolchainDir().path, 'bin', `llvm-cxxfilt${platform.exeSuffix()}`].join(File.sep);
+                        elfcmds = ['-ln', '-S', elfpath];
+                        symMatcher = /^(?<addr>[0-9a-f]+)\s+(?<size>[0-9a-f]+\s+)?(?<type>\w)\s+(?<name>[^\s]+)\s+(?<loca>.*)/i;
+                        symTypConv = (t) => this.convGnuSymbolType2ReadableString(t)
+                        break;
+                    case 'GNU_SDCC_MCS51':
+                        elfpath = prj.getExecutablePath();
+                        elftool = [toolchain.getToolchainDir().path, 'bin', `i51-elf-nm${platform.exeSuffix()}`].join(File.sep);
+                        elfcmds = ['-ln', '-S', elfpath];
+                        symMatcher = /^(?<addr>[0-9a-f]+)\s+(?<size>[0-9a-f]+\s+)?(?<type>\w)\s+(?<name>[^\s]+)\s+(?<loca>.*)/i;
+                        symTypConv = (t) => this.convGnuSymbolType2ReadableString(t)
+                        break;
+                    default:
+                        throw new Error(`Not support symbol view for '${toolchain.name}' !`);
+                }
+
+                if (!File.IsFile(elfpath)) {
+                    throw new Error(`Not found elf file: '${elfpath}', please build your project !`);
+                }
+
+                if (!File.IsFile(elftool)) {
+                    throw new Error(`Not found elf tool: '${elftool}' !`);
+                }
+
+                // Don't use 'child_process.execFileSync' because a huge file 
+                // will cause an ENOBUF Error.
+                const doReadSymbolLines = (toolpath: string, cmds: string[]): Promise<string[]> => {
+                    return new Promise((resolve) => {
+                        const executable = new ExeFile();
+                        const results: string[] = [];
+                        executable.on('line', (line) => {
+                            results.push(line);
+                        });
+                        executable.on('close', () => {
+                            resolve(results);
+                        });
+                        executable.on('error', (err) => {
+                            GlobalEvent.log_warn(err);
+                        });
+                        executable.Run(toolpath, cmds);
+                    });
+                };
+
+                let textLines = await doReadSymbolLines(elftool, elfcmds);
+
+                // filter lines
+                // notes:
+                //  - will contain the line that matched by 'staMatcher'
+                //  - Not  contain the line that matched by 'endMatcher'
+                if (staMatcher) {
+
+                    let matchedLines: string[] = [];
+                    let started = false;
+
+                    for (const line of textLines) {
+
+                        if (!started && staMatcher.test(line)) {
+                            started = true;
+                        }
+
+                        if (started) {
+
+                            if (matchedLines.length > 0 &&
+                                endMatcher && endMatcher.test(line)) {
+                                break;
+                            }
+
+                            matchedLines.push(line);
+                        }
+                    }
+
+                    textLines = matchedLines;
+                }
+
+                let sym_cur_file_location: string | undefined;
+
+                for (let i = 0; i < textLines.length; i++) {
+
+                    let line = textLines[i];
+
+                    if (locMatcher) {
+                        const m = locMatcher.exec(line);
+                        if (m && m.groups) {
+                            sym_cur_file_location = m.groups['loca']?.trim();
+                        }
+                    }
+
+                    if (truncatStaMatcher && truncatEndMatcher) {
+                        let nxtLine = i + 1 < textLines.length ? textLines[i + 1] : undefined;
+                        if (nxtLine &&
+                            truncatStaMatcher.test(line) && truncatEndMatcher.test(nxtLine)) {
+                            line = line + nxtLine;
+                            i++;
+                        }
+                    }
+
+                    const m = symMatcher.exec(line);
+                    if (!(m && m.groups)) { // no matched
+                        continue;
+                    }
+
+                    let addr = m.groups['addr']?.trim();
+                    let size = m.groups['size']?.trim();
+                    let type = m.groups['type']?.trim();
+                    let name = m.groups['name']?.trim();
+                    let loca = m.groups['loca']?.trim();
+
+                    if (!addr || !name) {
+                        continue;
+                    }
+
+                    // C++ symbol name demangler
+                    if (cxxfilt && name.startsWith('_Z'))
+                        name = cxxDemangle(name, cxxfilt);
+
+                    if (type && symTypConv) {
+                        type = symTypConv(type);
+                    }
+
+                    // symbol name is a source file ?
+                    if (/\.(?:c|cpp|cxx|c\+\+|cc|s|asm)$/i.test(name)) {
+                        sym_cur_file_location = name;
+                        continue;
+                    }
+
+                    size = size || '--';
+                    type = type || '--';
+                    loca = loca || sym_cur_file_location || '--';
+                    if (loca !== '--')
+                        loca = prj.toAbsolutePath(loca);
+
+                    allSymbols.push({ addr, size, type, name, loca });
+                }
+
+                resolve(allSymbols);
+
+            } catch (error) {
+                allSymbols.push({
+                    addr: 'NaN',
+                    size: 'NaN',
+                    type: (<Error>error).name,
+                    name: (<Error>error).message,
+                    loca: '---'
+                });
+                resolve(allSymbols);
+            }
+        });
     }
 
     //---
