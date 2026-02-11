@@ -638,7 +638,7 @@
         const m = /(.*?)(:\d+)?$/.exec(loca);
         if (m && m.length > 1) {
           absPath = m[1].trim();
-          if (m.length > 2)
+          if (m.length > 2 && m[2])
             lineNumber = parseInt(m[2].substr(1));
           vscode.postMessage({
             id: 'symbol.gotoDefinition',
