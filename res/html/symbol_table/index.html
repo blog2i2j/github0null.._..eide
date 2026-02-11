@@ -635,7 +635,7 @@
         console.log("Go To Definition loca:", loca);
         let absPath;
         let lineNumber;
-        const m = /(.*?)(:\d+)?$/.exec(loca);
+        const m = /(.+?)(:\d+)?$/.exec(loca);
         if (m && m.length > 1) {
           absPath = m[1].trim();
           if (m.length > 2 && m[2])
