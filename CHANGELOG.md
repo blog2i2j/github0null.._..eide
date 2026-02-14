@@ -6,7 +6,7 @@ All notable version changes will be recorded in this file.
 
 ***
 
-### [v3.26.2] revision
+### [v3.26.3] revision
 
 **New**:
   - `Symbol Table View`: New symbol table UI (with c++ symbol name demangler).

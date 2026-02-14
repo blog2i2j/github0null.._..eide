@@ -659,7 +659,7 @@ export class ResManager extends events.EventEmitter {
             return true; // done, exit
 
         } catch (error) {
-            GlobalEvent.emit('msg', ExceptionToMessage(error, 'Warning'));
+            GlobalEvent.log_warn(error);
         }
     }
 
