@@ -44,7 +44,7 @@ import {
     view_str$prompt$install_dotnet_and_restart_vscode,
     view_str$prompt$install_dotnet_failed,
     view_str$prompt$not_found_compiler, view_str$prompt$debugCfgNotSupported, not_support_no_arm_project,
-    view_str$prompt$requireOtherExtension
+    view_str$prompt$requireOtherExtension, view_str$add_missed_stubs
 } from './StringTable';
 import { LogDumper } from './LogDumper';
 import { StatusBarManager } from './StatusBarManager';
@@ -170,6 +170,7 @@ export async function activate(context: vscode.ExtensionContext) {
     subscriptions.push(vscode.commands.registerCommand('eide.project.buildAndFlash', (item) => projectExplorer.BuildSolution(item, { not_rebuild: true, flashAfterBuild: true })));
     subscriptions.push(vscode.commands.registerCommand('eide.project.genBuilderParams', (item) => projectExplorer.BuildSolution(item, { not_rebuild: true, onlyDumpBuilderParams: true })));
     subscriptions.push(vscode.commands.registerCommand('eide.open.makelibs.cfg', (item) => projectExplorer.openLibsGeneratorConfig(item)));
+    subscriptions.push(vscode.commands.registerCommand('eide.project.create_sys_stubs', (projuid) => projectExplorer.createSysStubs(projuid)));
 
     // operations bar
     subscriptions.push(vscode.commands.registerCommand('_cl.eide.project.historyRecord', () => projectExplorer.openHistoryRecords()));
@@ -294,6 +295,8 @@ export async function activate(context: vscode.ExtensionContext) {
     // others
     vscode.workspace.registerTextDocumentContentProvider(VirtualDocument.scheme, VirtualDocument.instance());
     vscode.workspace.registerTaskProvider(EideTaskProvider.TASK_TYPE_BASH, new EideTaskProvider());
+    vscode.languages.registerCodeActionsProvider({ scheme: 'file', pattern: '**/compiler.log' }, 
+        new CompilerLogCodeActionProvider(), { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] });
 
     // auto save project
     projectExplorer.enableAutoSave(true);
@@ -1609,6 +1612,7 @@ import {
     PyOCDFlashOptions, STLinkOptions, ProbeRSFlashOptions, STVPFlasherOptions
 } from './HexUploader';
 import { AbstractProject } from './EIDEProject';
+import { EideDiagnosticCode } from './ProblemMatcher';
 
 type MapViewParserType = 'memap' | 'builtin';
 
@@ -2306,6 +2310,50 @@ async function startDebugging(attach?: boolean) {
             cfg = cfgs[idx];
         }
         await vscode.debug.startDebugging(vscWorkspaceFolder, cfg);
+    }
+}
+
+class CompilerLogCodeActionProvider implements vscode.CodeActionProvider {
+
+    provideCodeActions(document: vscode.TextDocument, 
+        range: vscode.Range | vscode.Selection, 
+        context: vscode.CodeActionContext, token: vscode.CancellationToken): vscode.ProviderResult<(vscode.CodeAction | vscode.Command)[]> {
+        const results: (vscode.CodeAction | vscode.Command)[] = [];
+
+        let prjuid: string | undefined;
+        projectExplorer.foreachProjects(prj => {
+            const root = prj.getRootDir().path;
+            if (File.isSubPathOf(root, document.uri.fsPath)) {
+                prjuid = prj.getUid();
+                return true;
+            }
+        });
+
+        if (prjuid === undefined)
+            return results;
+
+        const stub_missed_diags: vscode.Diagnostic[] = [];
+
+        context.diagnostics.forEach((ele) => {
+            if (ele.source === 'eide') {
+                if (ele.code == EideDiagnosticCode.GCC_SYS_STUB_MISSED) {
+                    stub_missed_diags.push(ele);
+                }
+            }
+        });
+
+        if (stub_missed_diags.length > 0) {
+            const act = new vscode.CodeAction(view_str$add_missed_stubs, vscode.CodeActionKind.QuickFix);
+            act.diagnostics = stub_missed_diags;
+            act.command = {
+                title: view_str$add_missed_stubs,
+                command: 'eide.project.create_sys_stubs',
+                arguments: [prjuid]
+            };
+            results.push(act);
+        }
+
+        return results;
     }
 }
 

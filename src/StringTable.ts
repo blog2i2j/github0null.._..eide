@@ -459,6 +459,16 @@ export const view_str$env_desc$py3_cmd = [
 
 //---------------Other---------------
 
+export const view_str$missed_stubs_added = [
+    '桩函数源文件 {} 已经添加到项目。',
+    'The stubs file "{}" has been added to the project.'
+][langIndex];
+
+export const view_str$add_missed_stubs = [
+    '添加缺失的桩函数',
+    'Add missed stubs'
+][langIndex];
+
 export const view_str$prompt$migrationFailed = [
     `迁移旧项目失败！路径：{}`,
     `Migrate Old Project Failed ! Path: {}`

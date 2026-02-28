@@ -6,6 +6,14 @@ All notable version changes will be recorded in this file.
 
 ***
 
+### [v3.26.4] revision
+
+**Improve**:
+  - `Project Diagnostics`: Add code action for stub func missed warning. (to auto fix gcc warning: "_xxx is not implemented and will always fail")
+  - `Toolchain Setup`: Goto eide tools folder by default when user start to select a location.
+
+***
+
 ### [v3.26.3] revision
 
 **New**:

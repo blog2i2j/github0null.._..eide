@@ -1266,6 +1266,9 @@ export abstract class AbstractProject implements CustomConfigurationProvider, Pr
         return (<FileGroup[]>this.sourceRoots.getFileGroups()).concat(this.virtualSource.getFileGroups());
     }
 
+    /**
+     * @note Not contains excluded source files. if you want to list all sources, please use getFileGroups
+    */
     getAllSources(): { path: string, virtualPath?: string; }[] {
 
         const srcList: { path: string, virtualPath?: string; }[] = [];

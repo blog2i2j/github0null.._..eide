@@ -88,7 +88,8 @@ import {
     txt_no,
     remove_this_item,
     view_str$prompt$filesOptionsComment,
-    view_str$virual_doc_provider_banner
+    view_str$virual_doc_provider_banner,
+    view_str$missed_stubs_added
 } from './StringTable';
 import { CodeBuilder, BuildOptions } from './CodeBuilder';
 import { ExceptionToMessage, newMessage } from './Message';
@@ -128,7 +129,7 @@ import {
 } from 'vscode-cpptools';
 import * as eclipseParser from './EclipseProjectParser';
 import { isArray } from 'util';
-import { parseIarCompilerLog, CompilerDiagnostics, parseGccCompilerLog, parseArmccCompilerLog, parseKeilc51CompilerLog, parseSdccCompilerLog, parseCosmicStm8CompilerLog } from './ProblemMatcher';
+import { parseIarCompilerLog, CompilerDiagnostics, parseGccCompilerLog, parseArmccCompilerLog, parseKeilc51CompilerLog, parseSdccCompilerLog, parseCosmicStm8CompilerLog, EideDiagnosticCode } from './ProblemMatcher';
 import * as iarParser from './IarProjectParser';
 import * as ArmCpuUtils from './ArmCpuUtils';
 import { ShellFlasherIndexItem } from './WebInterface/WebInterface';
@@ -3488,6 +3489,16 @@ export class ProjectExplorer implements CustomConfigurationProvider {
         this._event.emit(event, arg);
     }
 
+    /**
+     * 
+     * @param callbk return true to break foreach
+     */
+    foreachProjects(callbk: (val: AbstractProject, index: number) => boolean | undefined) {
+        this.dataProvider.traverseProjects((prj, idx) => {
+            return callbk(prj, idx);
+        });
+    }
+
     getProjectByTreeItem(prjItem?: ProjTreeItem): AbstractProject | undefined {
         return prjItem instanceof ProjTreeItem ?
             this.dataProvider.GetProjectByIndex(prjItem.val.projectIndex) :
@@ -3517,6 +3528,36 @@ export class ProjectExplorer implements CustomConfigurationProvider {
     }
 
     // -------
+
+    createSysStubs(prjuid: string | undefined) {
+
+        const prj = prjuid 
+            ? this.dataProvider.getProjectByUid(prjuid)
+            : this.dataProvider.getActiveProject();
+        if (!prj)
+            return; // no project
+
+        const tarFile = File.from(prj.getRootDir().path, 'sys_stubs.c');
+        for (const grp of prj.getFileGroups()) {
+            for (const e of grp.files) {
+                if (tarFile.path === e.file.path)
+                    return; // it's existed, abort.
+            }
+        }
+
+        try {
+            const srcFile = File.from(ResManager.instance().getAppDataDir().path, 'gcc_posix_stubs.c');
+            tarFile.Write(srcFile.Read());
+            const vSrcManger = prj.getVirtualSourceManager();
+            vSrcManger.addFile(VirtualSource.rootName, tarFile.path);
+            // clear diags
+            const uri = vscode.Uri.file(File.from(prj.getOutputFolder().path, 'compiler.log').path);
+            this.compiler_diags.get(prj.getUid())?.delete(uri);
+            GlobalEvent.show_msgbox('Info', view_str$missed_stubs_added.replace('{}', tarFile.name));
+        } catch (error) {
+            GlobalEvent.show_msgbox('Error', error);
+        }
+    }
 
     openLibsGeneratorConfig(prjItem?: ProjTreeItem) {
 
@@ -3871,13 +3912,52 @@ export class ProjectExplorer implements CustomConfigurationProvider {
         }
     }
 
+    private parseLdLogs(file: File): {content: string, idx: number}[] {
+
+        const logLines: {content: string, idx: number}[] = [];
+
+        try {
+
+            const fileLines = file.Read().split(/\r\n|\n/);
+
+            let logStarted = false;
+            let logEnd = false;
+
+            fileLines.forEach((line, idx) => {
+
+                if (logEnd)
+                    return;
+
+                if (!logStarted) {
+                    if (line.startsWith('>>> ld')) {
+                        logStarted = true;
+                    }
+                } else {
+                    if (line.startsWith('>>>')) {
+                        logEnd = true;
+                    } else {
+                        logLines.push({
+                            content: line,
+                            idx
+                        });
+                    }
+                }
+            });
+
+        } catch (error) {
+            // nothing todo
+        }
+
+        return logLines;
+    }
+
     private updateCompilerDiagsAfterBuild(prj: AbstractProject) {
 
         let diag_res: CompilerDiagnostics | undefined;
 
-        try {
+        const logFile = File.from(prj.getOutputFolder().path, 'compiler.log');
 
-            const logFile = File.fromArray([prj.getOutputFolder().path, 'compiler.log']);
+        try {
 
             switch (prj.getToolchain().name) {
                 case 'IAR_ARM':
@@ -3904,6 +3984,46 @@ export class ProjectExplorer implements CustomConfigurationProvider {
 
         } catch (error) {
             GlobalEvent.log_warn(error);
+        }
+
+        if (isGccFamilyToolchain(prj.toolchainName())) {
+            // examples:
+            //  >>> ld
+            //  ....
+            //  warning: _getpid is not implemented and will always fail
+            const allStubs = [
+                '_chown', '_execve', '_fork', '_fstat', '_getpid',
+                '_gettimeofday', '_isatty', '_kill', '_link', '_lseek',
+                '_open', '_close', '_read', '_readlink', '_stat', '_symlink', '_times', '_unlink', '_wait', '_write',
+            ];
+            const missedStubs: {name: string, lineIdx: number}[] = [];
+
+            this.parseLdLogs(logFile).forEach(line => {
+                const m = /warning: (\w+) is not implemented and will always fail/.exec(line.content);
+                if (m && m.length > 1) {
+                    const name = m[1];
+                    if (allStubs.includes(name))
+                        missedStubs.push({ name, lineIdx: line.idx });
+                }
+            });
+
+            if (missedStubs.length > 0) {
+                if (diag_res == undefined)
+                    diag_res = {};
+                const diags: vscode.Diagnostic[] = [];
+                for (const ele of missedStubs) {
+                    const range = new vscode.Range(
+                        new vscode.Position(ele.lineIdx, 0),
+                        new vscode.Position(ele.lineIdx, 54));
+                    const diag = new vscode.Diagnostic(range,
+                        `warning: ${ele.name} is not implemented and will always fail`, 
+                        vscode.DiagnosticSeverity.Warning);
+                    diag.source = "eide";
+                    diag.code = EideDiagnosticCode.GCC_SYS_STUB_MISSED;
+                    diags.push(diag);
+                }
+                diag_res[logFile.path] = diags;
+            }
         }
 
         if (diag_res) {
