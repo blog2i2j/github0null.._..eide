@@ -924,27 +924,27 @@ export class OperationExplorer {
 
             const pickItems: vscode.QuickPickItem[] = [
                 {
-                    label: 'Online',
-                    description: 'Download from website and install',
-                    detail: view_str$prompt$tool_install_mode_online
-                },
-                {
                     label: 'Local',
                     description: 'Use existed installation directory',
                     detail: view_str$prompt$tool_install_mode_local
+                },
+                {
+                    label: 'Online',
+                    description: 'Download from website and install',
+                    detail: view_str$prompt$tool_install_mode_online
                 }
             ];
 
-            const onlineInstall = await vscode.window.showQuickPick(pickItems, {
+            const select = await vscode.window.showQuickPick(pickItems, {
                 canPickMany: false,
                 placeHolder: view_str$prompt$select_tool_install_mode
             });
 
-            if (onlineInstall == undefined) {
+            if (select == undefined) {
                 return;
             }
 
-            if (onlineInstall.label == 'Online') {
+            if (select.label == 'Online') {
                 await resInstaller.installTool(item.type);
                 return;
             }
@@ -972,6 +972,10 @@ export class OperationExplorer {
                 canSelectMany: false
             };
         }
+
+        if (item.type !== 'Keil_C51' && !item.label.includes('MDK') &&
+            item.type !== 'IAR_ARM' && item.type !== 'IAR_STM8')
+            dialogOption.defaultUri = vscode.Uri.file(ResManager.instance().getEideToolsInstallDir());
 
         const path = await vscode.window.showOpenDialog(dialogOption);
         if (path === undefined || path.length === 0) {
