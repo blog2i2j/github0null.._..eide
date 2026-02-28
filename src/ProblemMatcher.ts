@@ -99,6 +99,10 @@ function newVscFileRange(line: number, start: number, len: number): vscode.Range
 
 //////////////////////////////////////////////////////////////////////
 
+export enum EideDiagnosticCode {
+    GCC_SYS_STUB_MISSED = 10,
+};
+
 export type CompilerDiagnostics = { [path: string]: vscode.Diagnostic[]; }
 
 export function parseArmccCompilerLog(projApi: ProjectBaseApi, logFile: File): CompilerDiagnostics {

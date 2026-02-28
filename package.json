@@ -539,6 +539,11 @@
         ],
         "commands": [
             {
+                "command": "eide.project.create_sys_stubs",
+                "category": "eide",
+                "title": "Create gcc system stubs for project"
+            },
+            {
                 "command": "eide.debug.start",
                 "category": "eide",
                 "title": "%eide.project.debug.start%",
